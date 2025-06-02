@@ -6,49 +6,97 @@ import os
 # --- Configuración Inicial ---
 DATA_FILE = 'planner_data.csv' # Archivo donde se guardarán los datos
 
+# --- Definición de columnas de la aplicación ---
+# Define todas las columnas esperadas, con sus tipos de datos iniciales
+APP_COLUMNS = {
+    'Fecha': 'date',
+    'Entrenamiento_Hecho': 'bool', # Checkbox para entrenamiento
+    'Entrenamiento_Minutos': 'float', # Minutos de entrenamiento
+    'Comida Saludable': 'bool',
+    'Agua_Litros': 'float', # Litros de agua
+    'Horas Extra': 'float',
+    'Meditacion_Minutos': 'float', # Nuevo: Meditación
+    'Lectura_Paginas': 'int', # Nuevo: Lectura
+
+    # Objetivos de Salud (siguen siendo booleanos para el último registro del mes)
+    'Otorrino (vos)': 'bool',
+    'Otorrino (Guille)': 'bool',
+    'Dentista (vos)': 'bool',
+    'Dentista (Guille)': 'bool',
+    'Neumonólogo (Guille)': 'bool',
+    'Brackets (averiguar - ambos)': 'bool',
+    'Rinoseptoplastia (consulta)': 'bool',
+
+    # Proyectos (estados)
+    'App ingresos y salidas': 'str',
+    'App progreso personal': 'str'
+}
+
+
 # Cargar datos existentes o crear un DataFrame vacío
 if os.path.exists(DATA_FILE):
     df = pd.read_csv(DATA_FILE)
     # Convertir 'Fecha' a datetime y luego a formato de fecha (naive) para consistencia
-    # errors='coerce' convertirá valores no válidos a NaT (Not a Time)
     df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.date
-    # Eliminar filas con fechas no válidas
-    df.dropna(subset=['Fecha'], inplace=True)
-else:
-    # Definir columnas para el DataFrame
-    columns = [
-        'Fecha', 'Entrenamiento', 'Comida Saludable', 'Agua', 'Horas Extra',
-        'Otorrino (vos)', 'Otorrino (Guille)', 'Dentista (vos)', 'Dentista (Guille)',
-        'Neumonólogo (Guille)', 'Brackets (averiguar - ambos)', 'Rinoseptoplastia (consulta)',
-        'App ingresos y salidas', 'App progreso personal'
-    ]
-    df = pd.DataFrame(columns=columns)
-    # La columna 'Fecha' se llenará con objetos date, no datetime
-    # por lo que no es necesario pd.to_datetime(df['Fecha']) aquí inicialmente.
-    # El tipo se establecerá cuando se añadan las primeras filas.
+    df.dropna(subset=['Fecha'], inplace=True) # Eliminar filas con fechas no válidas
     
-    # Inicializar columnas booleanas a False
-    for col in ['Entrenamiento', 'Comida Saludable', 'Agua',
-                'Otorrino (vos)', 'Otorrino (Guille)', 'Dentista (vos)', 'Dentista (Guille)',
-                'Neumonólogo (Guille)', 'Brackets (averiguar - ambos)', 'Rinoseptoplastia (consulta)']:
-        df[col] = False # Asegurar que es False directamente, no de un astype(bool) vacío
-    # Inicializar columnas de proyectos a 'Pendiente'
-    for col in ['App ingresos y salidas', 'App progreso personal']:
-        df[col] = 'Pendiente'
-    df['Horas Extra'] = 0.0
+    # Asegurar que todas las columnas esperadas existan y tengan el tipo correcto
+    for col, dtype in APP_COLUMNS.items():
+        if col not in df.columns:
+            # Si la columna no existe, añadirla con el tipo de dato inicial
+            if dtype == 'bool':
+                df[col] = False
+            elif dtype == 'float':
+                df[col] = 0.0
+            elif dtype == 'int':
+                df[col] = 0
+            elif dtype == 'str':
+                if col in ['App ingresos y salidas', 'App progreso personal']:
+                    df[col] = 'Pendiente'
+                else:
+                    df[col] = '' # Default vacío para otros strings
+        else:
+            # Intentar convertir al tipo correcto si ya existe la columna
+            if dtype == 'bool':
+                df[col] = df[col].fillna(False).astype(bool)
+            elif dtype == 'float':
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+            elif dtype == 'int':
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+            # 'str' y 'date' ya se manejan arriba
+            
+else:
+    # Crear un DataFrame vacío con las columnas y tipos de datos definidos
+    df = pd.DataFrame({col: pd.Series(dtype=dt) for col, dt in APP_COLUMNS.items()})
+    # Ajustar valores iniciales para booleanos y strings por defecto
+    for col, dtype in APP_COLUMNS.items():
+        if dtype == 'bool':
+            df[col] = False
+        elif dtype == 'float':
+            df[col] = 0.0
+        elif dtype == 'int':
+            df[col] = 0
+        elif dtype == 'str':
+            if col in ['App ingresos y salidas', 'App progreso personal']:
+                df[col] = 'Pendiente'
+            else:
+                df[col] = ''
+
 
 # Función para guardar los datos
 def save_data(dataframe):
-    # Antes de guardar, asegurarnos que la fecha sea un string compatible
     temp_df = dataframe.copy()
-    temp_df['Fecha'] = temp_df['Fecha'].astype(str) # Guarda como 'YYYY-MM-DD'
+    # Asegurarse de que la columna 'Fecha' sea un string compatible antes de guardar
+    if 'Fecha' in temp_df.columns:
+        temp_df['Fecha'] = temp_df['Fecha'].astype(str)
     temp_df.to_csv(DATA_FILE, index=False)
+
 
 # --- Título de la Aplicación ---
 st.title("🗓️ Mi Planner Mensual Interactivo")
 
 # --- Pestañas de Navegación ---
-tab1, tab2, tab3, tab4 = st.tabs(["Seguimiento Diario", "Salud / Turnos", "Proyectos", "Resumen y Bonificación"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Seguimiento Diario", "Salud / Turnos", "Proyectos", "Resumen y Bonificación", "Mi Guía Espiritual"])
 
 # --- Pestaña 1: Seguimiento Diario ---
 with tab1:
@@ -57,62 +105,75 @@ with tab1:
     today = datetime.now().date() # Esto es un objeto date, naive
 
     # Asegurarse de que tengamos una fila para hoy
-    # Comparar objetos date directamente
-    if today not in df['Fecha'].values: # <-- CAMBIO AQUÍ: quitar .dt.date
-        new_row_data = {
-            'Fecha': today, # Se añade como objeto date
-            'Entrenamiento': False,
-            'Comida Saludable': False,
-            'Agua': False,
-            'Horas Extra': 0.0,
-        }
-        # Añadir las columnas de salud e inicializarlas
-        salud_cols = [
-            'Otorrino (vos)', 'Otorrino (Guille)', 'Dentista (vos)', 'Dentista (Guille)',
-            'Neumonólogo (Guille)', 'Brackets (averiguar - ambos)', 'Rinoseptoplastia (consulta)'
-        ]
-        for col in salud_cols:
-            new_row_data[col] = False # Inicializar a False
-
-        # Añadir las columnas de proyectos e inicializarlas
-        proj_cols = ['App ingresos y salidas', 'App progreso personal']
-        for col in proj_cols:
-            new_row_data[col] = 'Pendiente' # Inicializar a 'Pendiente'
-
+    if today not in df['Fecha'].values:
+        new_row_data = {col: APP_COLUMNS[col] for col in APP_COLUMNS.keys()} # Iniciar con valores por defecto del diccionario
+        
+        # Ajustar los valores por defecto específicos para la nueva fila
+        new_row_data['Fecha'] = today
+        for col, dtype in APP_COLUMNS.items():
+            if dtype == 'bool' and col != 'Fecha': # Excluir 'Fecha' que ya se seteó
+                new_row_data[col] = False
+            elif dtype == 'float':
+                new_row_data[col] = 0.0
+            elif dtype == 'int':
+                new_row_data[col] = 0
+            elif dtype == 'str':
+                 if col in ['App ingresos y salidas', 'App progreso personal']:
+                    new_row_data[col] = 'Pendiente'
+                 else:
+                    new_row_data[col] = ''
+        
         new_row = pd.DataFrame([new_row_data])
-
-        # Concatenar la nueva fila y ordenar por fecha
+        
+        # Asegurarse de que el tipo de la columna 'Fecha' sea el mismo antes de concatenar
+        # Convertir a object si es necesario para evitar TypeError si el DataFrame base es de tipo mixto
+        # Sin embargo, con los cambios anteriores, 'Fecha' debería ser 'object' (containing date objects)
+        # o 'datetime64[ns]' (if pd.to_datetime makes it so). Aquí lo tenemos como date objects.
+        
         df = pd.concat([df, new_row], ignore_index=True).sort_values(by='Fecha', ascending=True).reset_index(drop=True)
         save_data(df) # Guardar inmediatamente la nueva fila
 
     # Obtener la fila de hoy
-    # row_index = df[df['Fecha'].dt.date == today].index[0] # ANTES
-    row_index = df[df['Fecha'] == today].index[0] # <-- CAMBIO AQUÍ: comparar objetos date directamente
+    row_index = df[df['Fecha'] == today].index[0]
 
     st.write(f"### Hoy es: {today.strftime('%d/%m/%Y')}")
 
-    # Checkboxes para objetivos diarios
-    entrenamiento = st.checkbox("✅ Entrenamiento", value=df.loc[row_index, 'Entrenamiento'], key='entrenamiento_daily')
+    # Checkboxes y campos para objetivos diarios
+    entrenamiento_hecho = st.checkbox("✅ Entrenamiento Hecho", value=df.loc[row_index, 'Entrenamiento_Hecho'], key='entrenamiento_checkbox')
+    df.loc[row_index, 'Entrenamiento_Hecho'] = entrenamiento_hecho
+
+    entrenamiento_minutos = st.number_input("Minutos de Entrenamiento:", value=float(df.loc[row_index, 'Entrenamiento_Minutos']), min_value=0.0, step=15.0, key='entrenamiento_min')
+    df.loc[row_index, 'Entrenamiento_Minutos'] = entrenamiento_minutos
+
     comida_saludable = st.checkbox("✅ Comida Saludable", value=df.loc[row_index, 'Comida Saludable'], key='comida_daily')
-    agua = st.checkbox("✅ Agua", value=df.loc[row_index, 'Agua'], key='agua_daily')
-
-    df.loc[row_index, 'Entrenamiento'] = entrenamiento
     df.loc[row_index, 'Comida Saludable'] = comida_saludable
-    df.loc[row_index, 'Agua'] = agua
 
-    # Horas extra
+    agua_litros = st.number_input("Litros de Agua:", value=float(df.loc[row_index, 'Agua_Litros']), min_value=0.0, step=0.5, key='agua_litros')
+    df.loc[row_index, 'Agua_Litros'] = agua_litros
+
     horas_extra = st.number_input("Horas Extra:", value=float(df.loc[row_index, 'Horas Extra']), min_value=0.0, step=0.5, key='horas_extra_daily')
     df.loc[row_index, 'Horas Extra'] = horas_extra
+    
+    meditacion_minutos = st.number_input("Minutos de Meditación:", value=float(df.loc[row_index, 'Meditacion_Minutos']), min_value=0.0, step=5.0, key='meditacion_min')
+    df.loc[row_index, 'Meditacion_Minutos'] = meditacion_minutos
+
+    lectura_paginas = st.number_input("Páginas Leídas:", value=int(df.loc[row_index, 'Lectura_Paginas']), min_value=0, step=10, key='lectura_paginas')
+    df.loc[row_index, 'Lectura_Paginas'] = lectura_paginas
+
 
     st.write("---")
     st.subheader("Registro Diario (últimos 7 días)")
     # Mostrar el registro de los últimos 7 días para referencia
-    df_display = df.tail(7)[['Fecha', 'Entrenamiento', 'Comida Saludable', 'Agua', 'Horas Extra']].copy()
+    # Asegurarse de que solo se muestren las columnas relevantes para el seguimiento diario
+    daily_display_cols = [
+        'Fecha', 'Entrenamiento_Hecho', 'Entrenamiento_Minutos', 'Comida Saludable',
+        'Agua_Litros', 'Horas Extra', 'Meditacion_Minutos', 'Lectura_Paginas'
+    ]
+    df_display = df.tail(7)[daily_display_cols].copy()
     df_display['Fecha'] = df_display['Fecha'].astype(str) # Mostrar como string para evitar problemas de formato
     st.dataframe(df_display.set_index('Fecha'))
 
-    # Guardar cambios al final de la interacción diaria
-    save_data(df)
+    save_data(df) # Guardar cambios al final de la interacción diaria
 
 
 # --- Pestaña 2: Salud / Turnos ---
@@ -121,7 +182,6 @@ with tab2:
 
     st.subheader("Marcar Turnos Completados:")
 
-    # Objetivos de Salud
     salud_objetivos = {
         'Otorrino (vos)': 'Otorrino (vos)',
         'Otorrino (Guille)': 'Otorrino (Guille)',
@@ -133,18 +193,7 @@ with tab2:
     }
 
     st.write("Marque los turnos que ya se han completado este mes:")
-    # Para simplificar y asegurar que se guarde el estado del mes actual,
-    # actualizaremos el estado en la fila más reciente (asumiendo que es la del mes actual)
     if not df.empty:
-        # Asegurarse de que 'Fecha' esté en el formato correcto para comparación
-        # Si 'Fecha' ya está como objeto date, no hay problema.
-        # En caso de que el df se haya cargado con fechas como strings del CSV,
-        # necesitamos convertirlas a objetos date para que el filtro funcione correctamente.
-        # Sin embargo, con el cambio en save_data y load, 'Fecha' siempre debería ser 'date' objects.
-
-        # Encuentra la fila del día actual si existe, de lo contrario, la última fila.
-        # Si la app es abierta por primera vez en el día, 'today' ya se agregó en tab1
-        # Así que 'today' siempre debería estar en el df.
         current_day_row_index = df[df['Fecha'] == today].index[0] # Usar today (objeto date)
         
         for key, display_text in salud_objetivos.items():
@@ -167,7 +216,6 @@ with tab3:
         'App progreso personal': 'App progreso personal'
     }
 
-    # También actualizamos el estado en la última fila del DataFrame
     if not df.empty:
         current_day_row_index = df[df['Fecha'] == today].index[0] # Usar today (objeto date)
         for key, display_text in proyectos.items():
@@ -185,32 +233,28 @@ with tab4:
 
     st.subheader("Progreso General del Mes:")
 
-    # Filtrar datos solo para el mes actual
-    # today es un objeto date, current_month_start también debe serlo
     current_month_start = datetime(today.year, today.month, 1).date() 
-    
-    # Asegurarse de que df['Fecha'] contenga objetos date para la comparación
-    df_current_month = df[df['Fecha'] >= current_month_start].copy() # <-- CAMBIO AQUÍ
+    df_current_month = df[df['Fecha'] >= current_month_start].copy()
 
     if not df_current_month.empty:
-        # Calcular objetivos diarios
+        # --- Cálculo de objetivos diarios (ahora con promedios y sumas) ---
         total_days_logged = len(df_current_month)
-        if total_days_logged > 0:
-            avg_entrenamiento = df_current_month['Entrenamiento'].mean()
-            avg_comida = df_current_month['Comida Saludable'].mean()
-            avg_agua = df_current_month['Agua'].mean()
-        else:
-            avg_entrenamiento, avg_comida, avg_agua = 0, 0, 0
+        
+        # Entrenamiento: Contar días "hechos" y sumar minutos
+        entrenamiento_dias_hechos = df_current_month['Entrenamiento_Hecho'].sum()
+        entrenamiento_minutos_total = df_current_month['Entrenamiento_Minutos'].sum()
+
+        avg_comida = df_current_month['Comida Saludable'].mean() # Sigue siendo promedio de checkboxes
+        avg_agua_litros = df_current_month['Agua_Litros'].mean() # Promedio de litros de agua
+        avg_meditacion_minutos = df_current_month['Meditacion_Minutos'].mean() # Promedio de minutos de meditación
+        total_lectura_paginas = df_current_month['Lectura_Paginas'].sum() # Total de páginas leídas
 
         # Horas extra acumuladas
         total_horas_extra = df_current_month['Horas Extra'].sum()
 
         # Objetivos de salud (contamos los TRUEs del último registro del mes)
-        # Esto asume que el estado de salud se marca una vez y es válido para el mes
         salud_completados = 0
         if not df_current_month.empty:
-            # Necesitamos el estado de salud de la última fila del mes actual, que es la del día de hoy.
-            # Aseguramos que last_month_row sea la fila de hoy si está presente
             last_month_row = df_current_month[df_current_month['Fecha'] == today].iloc[0] if today in df_current_month['Fecha'].values else df_current_month.iloc[-1]
             for obj in salud_objetivos.keys():
                 if last_month_row[obj]:
@@ -227,28 +271,38 @@ with tab4:
         total_proyectos = len(proyectos)
 
         # --- Cálculo del Porcentaje de Progreso ---
-        # Asignamos un peso a cada categoría
-        # Puedes ajustar estos pesos según lo que consideres más importante
-        peso_diario = 0.4 # Entrenamiento, Comida, Agua
-        peso_horas_extra = 0.2
-        peso_salud = 0.2
-        peso_proyectos = 0.2
+        # Definimos metas para los nuevos objetivos
+        meta_entrenamiento_minutos_mensual = 15 * 60 # 15 entrenamientos de 60 minutos (900 minutos)
+        meta_meditacion_minutos_mensual = 30 * 10 # 30 días x 10 minutos (300 minutos)
+        meta_lectura_paginas_mensual = 30 * 10 # 30 días x 10 páginas (300 páginas)
+        objetivo_horas_extra_mensual = 40 # 20 horas por quincena -> 40 horas al mes
 
-        # Progreso diario: promedio de los 3 objetivos diarios
-        progreso_diario = (avg_entrenamiento + avg_comida + avg_agua) / 3 if total_days_logged > 0 else 0
-
-        # Progreso horas extra: Asumiendo 20 horas por quincena, 40 horas al mes como objetivo
-        objetivo_horas_extra_mensual = 40 # Puedes ajustar este objetivo
+        # Progreso de cada categoría
+        progreso_entrenamiento = min(entrenamiento_minutos_total / meta_entrenamiento_minutos_mensual, 1.0) if meta_entrenamiento_minutos_mensual > 0 else 0
+        progreso_comida = avg_comida # Porcentaje de días que comiste saludable
+        progreso_agua = min(avg_agua_litros / 2.0, 1.0) # Asumiendo 2 litros/día como meta promedio
+        progreso_meditacion = min(avg_meditacion_minutos / 10.0, 1.0) # Asumiendo 10 minutos/día como meta
+        progreso_lectura = min(total_lectura_paginas / meta_lectura_paginas_mensual, 1.0) if meta_lectura_paginas_mensual > 0 else 0
+        
         progreso_horas_extra = min(total_horas_extra / objetivo_horas_extra_mensual, 1.0) if objetivo_horas_extra_mensual > 0 else 0
-
-        # Progreso salud
         progreso_salud = salud_completados / total_salud_objetivos if total_salud_objetivos > 0 else 0
-
-        # Progreso proyectos
         progreso_proyectos = proyectos_completados / total_proyectos if total_proyectos > 0 else 0
 
-        # Progreso total ponderado
-        overall_progress = (progreso_diario * peso_diario) + \
+        # Nuevos pesos para la ponderación (ajusta a tu gusto)
+        peso_entrenamiento = 0.15
+        peso_comida = 0.10
+        peso_agua = 0.05
+        peso_meditacion = 0.10
+        peso_lectura = 0.10
+        peso_horas_extra = 0.15
+        peso_salud = 0.15
+        peso_proyectos = 0.20 # Le damos más peso a los proyectos como metas concretas
+
+        overall_progress = (progreso_entrenamiento * peso_entrenamiento) + \
+                           (progreso_comida * peso_comida) + \
+                           (progreso_agua * peso_agua) + \
+                           (progreso_meditacion * peso_meditacion) + \
+                           (progreso_lectura * peso_lectura) + \
                            (progreso_horas_extra * peso_horas_extra) + \
                            (progreso_salud * peso_salud) + \
                            (progreso_proyectos * peso_proyectos)
@@ -258,7 +312,11 @@ with tab4:
 
         st.write("---")
         st.subheader("Detalle del Progreso:")
-        st.write(f"- **Objetivos Diarios (Entrenamiento, Comida, Agua):** {progreso_diario:.1%}")
+        st.write(f"- **Entrenamiento:** {entrenamiento_minutos_total:.0f} min (Meta: {meta_entrenamiento_minutos_mensual:.0f} min) - Progreso: {progreso_entrenamiento:.1%}")
+        st.write(f"- **Comida Saludable (promedio días):** {progreso_comida:.1%}")
+        st.write(f"- **Agua (promedio litros/día):** {avg_agua_litros:.1f} L (Meta: 2.0 L/día) - Progreso: {progreso_agua:.1%}")
+        st.write(f"- **Meditación:** {avg_meditacion_minutos:.1f} min/día (Meta: 10 min/día) - Progreso: {progreso_meditacion:.1%}")
+        st.write(f"- **Lectura:** {total_lectura_paginas:.0f} págs (Meta: {meta_lectura_paginas_mensual:.0f} págs) - Progreso: {progreso_lectura:.1%}")
         st.write(f"- **Horas Extra Acumuladas:** {total_horas_extra} hrs (Meta: {objetivo_horas_extra_mensual} hrs) - Progreso: {progreso_horas_extra:.1%}")
         st.write(f"- **Objetivos de Salud Completados:** {salud_completados} de {total_salud_objetivos} - Progreso: {progreso_salud:.1%}")
         st.write(f"- **Proyectos Completados:** {proyectos_completados} de {total_proyectos} - Progreso: {progreso_proyectos:.1%}")
@@ -276,6 +334,44 @@ with tab4:
 
     else:
         st.info("Aún no hay datos para calcular el progreso. Empieza a registrar tus actividades.")
+
+# --- Pestaña 5: Mi Guía Espiritual ---
+with tab5:
+    st.header("✨ Mi Guía Espiritual de Objetivos Personales ✨")
+    st.markdown("""
+    Aquí encontrarás reflexiones y consejos para mantener tu mente y espíritu alineados con tus metas.
+    Recuerda que el progreso no siempre es lineal, y cada paso, por pequeño que sea, te acerca a tu mejor versión.
+    """)
+
+    st.subheader("Consejos del Día:")
+    # Podrías expandir esto con una lista de consejos o una función que elija uno aleatorio
+    consejos = [
+        "**Persistencia es clave:** Recuerda que cada día es una nueva oportunidad para empezar de nuevo y hacer las cosas mejor. No te castigues por los deslices, aprende de ellos.",
+        "**Escucha a tu cuerpo:** Tu cuerpo es tu templo. Entiende sus señales, descansa cuando sea necesario y nútrelo con lo mejor.",
+        "**La mente es tu aliada:** La visualización y la meditación no son solo para la calma, sino para enfocar tu energía y atraer tus objetivos. Dedica esos minutos de meditación a construir tu futuro.",
+        "**Pequeñas victorias:** Celebra cada logro, por insignificante que parezca. Cada página leída, cada minuto de entrenamiento, cada hora extra, te acerca a tu meta.",
+        "**Enfócate en el proceso, no solo en el resultado:** Disfruta el camino de crecimiento. La disciplina y la consistencia son los verdaderos maestros.",
+        "**Sé amable contigo mismo:** Habla contigo como le hablarías a un buen amigo. La autocompasión es un pilar fundamental del bienestar mental.",
+        "**Define tu 'por qué':** Cuando la motivación flaquea, recuerda la razón profunda detrás de tus objetivos. ¿Por qué quieres esto? Conéctate con esa energía.",
+        "**El progreso es personal:** No te compares con nadie más. Tu camino es único y tus victorias son tuyas.",
+        "**Respira y reconecta:** Si te sientes abrumado, tómate un momento para respirar profundamente. Un minuto de conexión contigo mismo puede resetear tu día.",
+        "**El aprendizaje es infinito:** Cada desafío es una oportunidad para aprender algo nuevo sobre ti y sobre cómo superar obstáculos."
+    ]
+    
+    # Elegir un consejo aleatorio para el día
+    import random
+    st.info(random.choice(consejos))
+
+    st.subheader("Tu Espacio para Reflexionar:")
+    st.write("¿Qué aprendizaje te dejó el día de hoy? ¿Qué te impulsó o te frenó?")
+    # Puedes usar un st.text_area para que escriba una reflexión diaria si lo deseas
+    # reflexion_diaria = st.text_area("Escribe aquí tu reflexión del día...", key="daily_reflection")
+    # Si quisieras guardar esto, necesitarías otra columna en el DataFrame.
+
+    st.markdown("""
+    ---
+    Recuerda: **Eres el arquitecto de tu destino.** Cada acción que marques en este planner es un ladrillo más en la construcción de la persona que quieres ser.
+    """)
 
 # Guardar los datos al final de la ejecución del script (Streamlit recarga el script en cada interacción)
 save_data(df)
