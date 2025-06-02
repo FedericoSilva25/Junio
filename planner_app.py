@@ -62,6 +62,7 @@ def save_financial_data(financial_df_to_save):
 
 
 # --- Cargar/Inicializar el DataFrame Principal ---
+# TODO: Verificar si esta indentación es la causa raíz
 if os.path.exists(DATA_FILE):
     df = pd.read_csv(DATA_FILE)
     df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.date
@@ -94,7 +95,7 @@ if os.path.exists(DATA_FILE):
             elif col_type == 'int':
                 df[col_name] = pd.to_numeric(df[col_name], errors='coerce').fillna(config.get('default', 0)).astype(int)
 
-else:
+else: # Este 'else' debe estar al mismo nivel que el 'if os.path.exists'
     initial_data = {col: [] for col in APP_COLUMNS_NAMES}
     df = pd.DataFrame(initial_data)
     
@@ -114,8 +115,7 @@ else:
                 df[col_name] = config.get('options', [''])[0] if config.get('options') else ''
 
 # Cargar los datos financieros al inicio del script.
-# Usamos st.session_state para manejar el DataFrame financiero persistente.
-# Esto es una forma más idiomática de Streamlit para el estado entre re-runs.
+# Este bloque DEBE estar al mismo nivel que la carga/inicialización de df.
 if 'financial_df' not in st.session_state:
     st.session_state.financial_df = load_financial_data() 
 
@@ -123,10 +123,12 @@ if 'financial_df' not in st.session_state:
 st.title("🗓️ Mi Planner Mensual Interactivo")
 
 # Obtener la fecha de hoy y el inicio del mes actual
+# Estos también deben estar al mismo nivel global.
 today = datetime.now().date()
 current_month_start = datetime(today.year, today.month, 1).date()
 
 # --- Pestañas de Navegación ---
+# Esta definición también debe estar al mismo nivel global.
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Seguimiento Diario", "Salud / Turnos", "Proyectos", 
     "Control Financiero", "Resumen y Bonificación", "Mi Guía Espiritual"
