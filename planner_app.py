@@ -9,9 +9,10 @@ DATA_FILE = 'planner_data.csv' # Archivo donde se guardarán los datos
 # Cargar datos existentes o crear un DataFrame vacío
 if os.path.exists(DATA_FILE):
     df = pd.read_csv(DATA_FILE)
-    # Asegurarse de que la columna 'Fecha' sea tipo datetime, manejando errores si los hay
-    df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce')
-    # Eliminar filas con fechas no válidas si 'coerce' falla (por ejemplo, si el archivo está corrupto)
+    # Convertir 'Fecha' a datetime y luego a formato de fecha (naive) para consistencia
+    # errors='coerce' convertirá valores no válidos a NaT (Not a Time)
+    df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.date
+    # Eliminar filas con fechas no válidas
     df.dropna(subset=['Fecha'], inplace=True)
 else:
     # Definir columnas para el DataFrame
@@ -22,14 +23,15 @@ else:
         'App ingresos y salidas', 'App progreso personal'
     ]
     df = pd.DataFrame(columns=columns)
-    # Establecer el tipo de dato para 'Fecha' a datetime en un DataFrame vacío
-    df['Fecha'] = pd.to_datetime(df['Fecha']) # <-- Añadido para asegurar el tipo
+    # La columna 'Fecha' se llenará con objetos date, no datetime
+    # por lo que no es necesario pd.to_datetime(df['Fecha']) aquí inicialmente.
+    # El tipo se establecerá cuando se añadan las primeras filas.
     
     # Inicializar columnas booleanas a False
     for col in ['Entrenamiento', 'Comida Saludable', 'Agua',
                 'Otorrino (vos)', 'Otorrino (Guille)', 'Dentista (vos)', 'Dentista (Guille)',
                 'Neumonólogo (Guille)', 'Brackets (averiguar - ambos)', 'Rinoseptoplastia (consulta)']:
-        df[col] = df[col].astype(bool)
+        df[col] = False # Asegurar que es False directamente, no de un astype(bool) vacío
     # Inicializar columnas de proyectos a 'Pendiente'
     for col in ['App ingresos y salidas', 'App progreso personal']:
         df[col] = 'Pendiente'
@@ -37,7 +39,10 @@ else:
 
 # Función para guardar los datos
 def save_data(dataframe):
-    dataframe.to_csv(DATA_FILE, index=False)
+    # Antes de guardar, asegurarnos que la fecha sea un string compatible
+    temp_df = dataframe.copy()
+    temp_df['Fecha'] = temp_df['Fecha'].astype(str) # Guarda como 'YYYY-MM-DD'
+    temp_df.to_csv(DATA_FILE, index=False)
 
 # --- Título de la Aplicación ---
 st.title("🗓️ Mi Planner Mensual Interactivo")
@@ -49,25 +54,40 @@ tab1, tab2, tab3, tab4 = st.tabs(["Seguimiento Diario", "Salud / Turnos", "Proye
 with tab1:
     st.header("Seguimiento Diario")
 
-    today = datetime.now().date()
+    today = datetime.now().date() # Esto es un objeto date, naive
+
     # Asegurarse de que tengamos una fila para hoy
-    if today not in df['Fecha'].dt.date.values:
-        new_row = pd.DataFrame([{
-            'Fecha': today,
+    # Comparar objetos date directamente
+    if today not in df['Fecha'].values: # <-- CAMBIO AQUÍ: quitar .dt.date
+        new_row_data = {
+            'Fecha': today, # Se añade como objeto date
             'Entrenamiento': False,
             'Comida Saludable': False,
             'Agua': False,
             'Horas Extra': 0.0,
-            'Otorrino (vos)': False, 'Otorrino (Guille)': False, 'Dentista (vos)': False, 'Dentista (Guille)': False,
-            'Neumonólogo (Guille)': False, 'Brackets (averiguar - ambos)': False, 'Rinoseptoplastia (consulta)': False,
-            'App ingresos y salidas': 'Pendiente', 'App progreso personal': 'Pendiente'
-        }])
+        }
+        # Añadir las columnas de salud e inicializarlas
+        salud_cols = [
+            'Otorrino (vos)', 'Otorrino (Guille)', 'Dentista (vos)', 'Dentista (Guille)',
+            'Neumonólogo (Guille)', 'Brackets (averiguar - ambos)', 'Rinoseptoplastia (consulta)'
+        ]
+        for col in salud_cols:
+            new_row_data[col] = False # Inicializar a False
+
+        # Añadir las columnas de proyectos e inicializarlas
+        proj_cols = ['App ingresos y salidas', 'App progreso personal']
+        for col in proj_cols:
+            new_row_data[col] = 'Pendiente' # Inicializar a 'Pendiente'
+
+        new_row = pd.DataFrame([new_row_data])
+
         # Concatenar la nueva fila y ordenar por fecha
-        df = pd.concat([df, new_row], ignore_index=True).sort_values(by='Fecha').reset_index(drop=True)
+        df = pd.concat([df, new_row], ignore_index=True).sort_values(by='Fecha', ascending=True).reset_index(drop=True)
         save_data(df) # Guardar inmediatamente la nueva fila
 
     # Obtener la fila de hoy
-    row_index = df[df['Fecha'].dt.date == today].index[0]
+    # row_index = df[df['Fecha'].dt.date == today].index[0] # ANTES
+    row_index = df[df['Fecha'] == today].index[0] # <-- CAMBIO AQUÍ: comparar objetos date directamente
 
     st.write(f"### Hoy es: {today.strftime('%d/%m/%Y')}")
 
@@ -88,7 +108,7 @@ with tab1:
     st.subheader("Registro Diario (últimos 7 días)")
     # Mostrar el registro de los últimos 7 días para referencia
     df_display = df.tail(7)[['Fecha', 'Entrenamiento', 'Comida Saludable', 'Agua', 'Horas Extra']].copy()
-    df_display['Fecha'] = df_display['Fecha'].dt.strftime('%d/%m/%Y')
+    df_display['Fecha'] = df_display['Fecha'].astype(str) # Mostrar como string para evitar problemas de formato
     st.dataframe(df_display.set_index('Fecha'))
 
     # Guardar cambios al final de la interacción diaria
@@ -112,19 +132,25 @@ with tab2:
         'Rinoseptoplastia (consulta)': 'Rinoseptoplastia (consulta)'
     }
 
-    # Asumimos que los objetivos de salud se marcan una vez al mes
-    # Usaremos el último registro disponible para el estado
-    # Si quieres que sean por día, la lógica cambia, pero para "turnos" una vez al mes tiene más sentido
-
     st.write("Marque los turnos que ya se han completado este mes:")
     # Para simplificar y asegurar que se guarde el estado del mes actual,
     # actualizaremos el estado en la fila más reciente (asumiendo que es la del mes actual)
     if not df.empty:
-        last_row_index = df.index[-1] # Última fila del DataFrame
+        # Asegurarse de que 'Fecha' esté en el formato correcto para comparación
+        # Si 'Fecha' ya está como objeto date, no hay problema.
+        # En caso de que el df se haya cargado con fechas como strings del CSV,
+        # necesitamos convertirlas a objetos date para que el filtro funcione correctamente.
+        # Sin embargo, con el cambio en save_data y load, 'Fecha' siempre debería ser 'date' objects.
+
+        # Encuentra la fila del día actual si existe, de lo contrario, la última fila.
+        # Si la app es abierta por primera vez en el día, 'today' ya se agregó en tab1
+        # Así que 'today' siempre debería estar en el df.
+        current_day_row_index = df[df['Fecha'] == today].index[0] # Usar today (objeto date)
+        
         for key, display_text in salud_objetivos.items():
-            current_value = df.loc[last_row_index, key] if key in df.columns else False
+            current_value = df.loc[current_day_row_index, key] if key in df.columns else False
             new_value = st.checkbox(f"✅ {display_text}", value=current_value, key=f'salud_{key}')
-            df.loc[last_row_index, key] = new_value
+            df.loc[current_day_row_index, key] = new_value
     else:
         st.info("Aún no hay datos. Registra algo en 'Seguimiento Diario' para que aparezcan las opciones de salud.")
 
@@ -143,11 +169,11 @@ with tab3:
 
     # También actualizamos el estado en la última fila del DataFrame
     if not df.empty:
-        last_row_index = df.index[-1]
+        current_day_row_index = df[df['Fecha'] == today].index[0] # Usar today (objeto date)
         for key, display_text in proyectos.items():
-            current_value = df.loc[last_row_index, key] if key in df.columns else 'Pendiente'
+            current_value = df.loc[current_day_row_index, key] if key in df.columns else 'Pendiente'
             option = st.selectbox(f"**{display_text}**", ['Pendiente', 'En Curso', 'Completado ✅'], index=['Pendiente', 'En Curso', 'Completado ✅'].index(current_value), key=f'proyecto_{key}')
-            df.loc[last_row_index, key] = option
+            df.loc[current_day_row_index, key] = option
     else:
         st.info("Aún no hay datos. Registra algo en 'Seguimiento Diario' para que aparezcan las opciones de proyectos.")
 
@@ -160,8 +186,11 @@ with tab4:
     st.subheader("Progreso General del Mes:")
 
     # Filtrar datos solo para el mes actual
-    current_month_start = datetime(today.year, today.month, 1).date()
-    df_current_month = df[df['Fecha'].dt.date >= current_month_start].copy()
+    # today es un objeto date, current_month_start también debe serlo
+    current_month_start = datetime(today.year, today.month, 1).date() 
+    
+    # Asegurarse de que df['Fecha'] contenga objetos date para la comparación
+    df_current_month = df[df['Fecha'] >= current_month_start].copy() # <-- CAMBIO AQUÍ
 
     if not df_current_month.empty:
         # Calcular objetivos diarios
@@ -180,7 +209,9 @@ with tab4:
         # Esto asume que el estado de salud se marca una vez y es válido para el mes
         salud_completados = 0
         if not df_current_month.empty:
-            last_month_row = df_current_month.iloc[-1]
+            # Necesitamos el estado de salud de la última fila del mes actual, que es la del día de hoy.
+            # Aseguramos que last_month_row sea la fila de hoy si está presente
+            last_month_row = df_current_month[df_current_month['Fecha'] == today].iloc[0] if today in df_current_month['Fecha'].values else df_current_month.iloc[-1]
             for obj in salud_objetivos.keys():
                 if last_month_row[obj]:
                     salud_completados += 1
@@ -189,7 +220,7 @@ with tab4:
         # Proyectos (contamos los 'Completado ✅' del último registro del mes)
         proyectos_completados = 0
         if not df_current_month.empty:
-            last_month_row = df_current_month.iloc[-1]
+            last_month_row = df_current_month[df_current_month['Fecha'] == today].iloc[0] if today in df_current_month['Fecha'].values else df_current_month.iloc[-1]
             for proj in proyectos.keys():
                 if last_month_row[proj] == 'Completado ✅':
                     proyectos_completados += 1
